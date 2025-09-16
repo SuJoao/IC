@@ -25,12 +25,12 @@ constexpr size_t FRAMES_BUFFER_SIZE = 65536; // Buffer for reading frames
 
 int main(int argc, char *argv[]) {
 
-	if(argc < 3) {
-		cerr << "Usage: " << argv[0] << " <input file> <channel>\n";
+	if(argc < 4) {
+		cerr << "Usage: " << argv[0] << " <input file> <channel> <bin>\n";
 		return 1;
 	}
 
-	SndfileHandle sndFile { argv[argc-2] };
+	SndfileHandle sndFile { argv[1] };
 	if(sndFile.error()) {
 		cerr << "Error: invalid input file\n";
 		return 1;
@@ -46,15 +46,21 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	int channel { stoi(argv[argc-1]) };
-	if(channel >= sndFile.channels()) {
+	int channel { stoi(argv[2]) };
+	if(channel >= sndFile.channels() + 2) {
 		cerr << "Error: invalid channel requested\n";
 		return 1;
 	}
 
+	size_t bin = stoi(argv[3]);
+	if (bin < 1 || (bin != 1 && bin % 2 != 0)) {
+	    cerr << "Error: bin must be 1 or a positive even number\n";
+	    return 1;
+	}
+
 	size_t nFrames;
 	vector<short> samples(FRAMES_BUFFER_SIZE * sndFile.channels());
-	WAVHist hist { sndFile };
+	WAVHist hist { sndFile, bin };
 	while((nFrames = sndFile.readf(samples.data(), FRAMES_BUFFER_SIZE))) {
 		samples.resize(nFrames * sndFile.channels());
 		hist.update(samples);

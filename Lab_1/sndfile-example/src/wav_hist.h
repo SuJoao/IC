@@ -25,16 +25,31 @@
 class WAVHist {
   private:
 	std::vector<std::map<short, size_t>> counts;
-
+	size_t binFactor;
+	size_t sfh_channels;
+	
   public:
-	WAVHist(const SndfileHandle& sfh) {
-		counts.resize(sfh.channels());
+	WAVHist(const SndfileHandle& sfh, size_t bin = 1) {
+		sfh_channels = sfh.channels();
+		binFactor = bin;
+		counts.resize(sfh_channels + 2);
 	}
 
 	void update(const std::vector<short>& samples) {
 		size_t n { };
-		for(auto s : samples)
-			counts[n++ % counts.size()][s]++;
+		short bin = binFactor - 1;
+		for(size_t i = 0; i < samples.size(); i++) {
+			short idx = samples[i] >> bin;
+			counts[n++ % sfh_channels][idx]++;
+
+			if(i > 0 && i % 2 != 0 && (sfh_channels == 2)) {
+				short left = samples[i-1] >> bin;
+				short right = samples[i] >> bin;
+
+				counts[2][(left + right) / 2]++;
+				counts[3][(left - right) / 2]++;
+			}
+		}	
 	}
 
 	void dump(const size_t channel) const {
@@ -44,4 +59,3 @@ class WAVHist {
 };
 
 #endif
-

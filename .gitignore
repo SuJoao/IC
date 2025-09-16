@@ -39,3 +39,37 @@
 
 # debug information files
 *.dwo
+
+# CMake build folders and files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+build/
+
+# Binaries
+Lab_1/sndfile-example/bin/
+
+# VSCode settings
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+__MACOSX/
+
+# Backup and temporary files
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
+*.old
+*.orig
+
+# Python cache (if any scripts are added)
+__pycache__/
+*.pyc
+*.pyo
