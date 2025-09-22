@@ -21,6 +21,7 @@
 #include <vector>
 #include <map>
 #include <sndfile.hh>
+#include <cmath>
 
 class WAVHist {
   private:
@@ -37,9 +38,11 @@ class WAVHist {
 
 	void update(const std::vector<short>& samples) {
 		size_t n { };
-		short bin = binFactor - 1;
+		short bin = (int)log2(binFactor);
 		for(size_t i = 0; i < samples.size(); i++) {
 			short idx = samples[i] >> bin;
+			idx =  samples[i] << bin;
+			idx += idx >= 0 ? idx + pow(2, bin) : idx - pow(2, bin);
 			counts[n++ % sfh_channels][idx]++;
 
 			if(i > 0 && i % 2 != 0 && (sfh_channels == 2)) {

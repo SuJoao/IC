@@ -53,8 +53,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	size_t bin = stoi(argv[3]);
-	if (bin < 1 || (bin != 1 && bin % 2 != 0)) {
-	    cerr << "Error: bin must be 1 or a positive even number\n";
+	if (!(bin > 0 && (bin & (bin - 1)) == 0)) {
+		cerr << "Error: bin must be a positive power of 2\n";
 	    return 1;
 	}
 
