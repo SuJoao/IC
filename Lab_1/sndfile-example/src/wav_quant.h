@@ -7,8 +7,6 @@
 #include <sndfile.hh>
 #include <cmath>
     
-
-
 class WAVQuant {
   private:
 	std::vector<std::map<short, size_t>> counts;
@@ -24,10 +22,10 @@ class WAVQuant {
 	void quantization(const std::vector<short>& samples) {
 		quantizedSamples.clear();
 		
+		int bits = max_binQuant - binQuant;
 		for(size_t i = 0; i < samples.size(); i++) {
-			int bits = max_binQuant - binQuant;
-			short new_sample = (samples[i] >> bits) << bits;
-			quantizedSamples.push_back(new_sample);
+			int new_sample = ((int)samples[i] >> bits) << bits;
+			quantizedSamples.push_back((short)new_sample);
 		}
 	}
 
