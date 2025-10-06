@@ -7,5 +7,9 @@ set xlabel "X"
 set ylabel "Y"
 set grid
 
-plot infile using 1:2 with lines title "Data"
+set style fill solid 0.8 border -1
+set boxwidth 0.9 relative
+
+plot infile using 1:2 with boxes lc rgb "#138cddff" notitle
+
 set output
