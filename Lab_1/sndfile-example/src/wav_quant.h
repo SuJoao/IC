@@ -9,7 +9,6 @@
     
 class WAVQuant {
   private:
-	std::vector<std::map<short, size_t>> counts;
 	int binQuant;
 	std::vector<short> quantizedSamples;
 	int max_binQuant = 16;
