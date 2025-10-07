@@ -13,3 +13,11 @@ To test:
 
 	// exercise 2
 	../bin/wav_quant <input file> <output file> <quantization bits>
+
+	// exercise 3
+	../bin/wav_cmp <sample1 file> <sample2 file>
+
+
+To generate histogram figures (requires gnuplot):
+	cd test
+	./get_hist_figs.sh sample.wav
