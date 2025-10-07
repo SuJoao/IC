@@ -1,6 +1,6 @@
 #!/bin/bash
 
-WAV=sample.wav
+WAV=$1
 
 # channels: 0-left, 1-right, 2-mid, 3-right
 for ch in 0 1 2 3; do
