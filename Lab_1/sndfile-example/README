@@ -22,10 +22,14 @@ To generate histogram figures (requires gnuplot):
 	cd test
 	./get_hist_figs.sh <sample.wav>
 
-to generate quantization figures (requires gnuplot):
+To generate quantization figures (requires gnuplot):
 	cd test
 	./get_quant_figs.sh <sample.wav>
 
-To clean up generated files by histogram figures and quantization figures:
+To generate comparison figures (requires gnuplot and matplotlib):
 	cd test
-	./clean.sh	
+	./get_cmp_figs.sh <sample.wav> <quantized.wav>
+
+To clean up generated files (.png, .dat, .wav):
+	cd test
+	./clean.sh
