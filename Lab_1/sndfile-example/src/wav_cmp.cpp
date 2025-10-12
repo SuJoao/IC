@@ -98,9 +98,9 @@ int main(int argc, char *argv[]) {
 
 
     for (int ch = 0; ch < numChannels; ++ch) {
-        cout << "Channel " << ch + 1 << " RMSE: " << rmse[ch] << endl;
-        cout << "Channel " << ch + 1 << " Max error: " << maxErr[ch] << endl;
-        cout << "Channel " << ch + 1 << " SNR: " << snr[ch] << " dB" << endl;
+        cout << "Channel " << ch << " RMSE: " << rmse[ch] << endl;
+        cout << "Channel " << ch << " Max error: " << maxErr[ch] << endl;
+        cout << "Channel " << ch << " SNR: " << snr[ch] << " dB" << endl;
     }
 
     cout << "Average RMSE: " << avgRMSE << endl;
