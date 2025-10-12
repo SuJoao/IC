@@ -20,4 +20,12 @@ To test:
 
 To generate histogram figures (requires gnuplot):
 	cd test
-	./get_hist_figs.sh sample.wav
+	./get_hist_figs.sh <sample.wav>
+
+to generate quantization figures (requires gnuplot):
+	cd test
+	./get_quant_figs.sh <sample.wav>
+
+To clean up generated files by histogram figures and quantization figures:
+	cd test
+	./clean.sh	
