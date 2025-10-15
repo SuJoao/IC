@@ -10,25 +10,13 @@ constexpr size_t FRAMES_BUFFER_SIZE = 65536;
 
 int main(int argc, char *argv[]) {
 
-    if (argc < 5) {
-        cerr << "Usage: " << argv[0] << " <input bin> <output wav> <quant bits> <channels>\n";
+    if (argc < 3) {
+        cerr << "Usage: " << argv[0] << " <input bin file> <output wav file>\n";
         return 1;
     }
 
     string input_bin = argv[1];
     string output_wav = argv[2];
-    int qbits = stoi(argv[3]);
-    int channels = stoi(argv[4]);
-
-    if (qbits <= 0 || qbits > 16) {
-        cerr << "Error: quantization bits must be between 1 and 16\n";
-        return 1;
-    }
-
-    if (channels <= 0) {
-        cerr << "Error: invalid number of channels\n";
-        return 1;
-    }
 
     fstream ifs { input_bin, ios::in | ios::binary };
     if (not ifs.is_open()) {
@@ -38,11 +26,12 @@ int main(int argc, char *argv[]) {
 
     BitStream ibs { ifs, STREAM_READ };
 
-    // Prepare output WAV file (maybe add a metadata header later)
-	// TODO
+    // Prepare output WAV file
     SF_INFO sfinfo;
-    sfinfo.samplerate = 44100;
-    sfinfo.channels = channels;
+    int qbits = ibs.read_n_bits(8);
+	int nchannels = ibs.read_n_bits(8);
+	sfinfo.channels = nchannels;
+    sfinfo.samplerate = ibs.read_n_bits(32);
 	sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
 
     SndfileHandle sndFileOut(output_wav, SFM_WRITE, sfinfo.format, sfinfo.channels, sfinfo.samplerate);
@@ -56,10 +45,10 @@ int main(int argc, char *argv[]) {
     //fstream debug_file { debug_filename, ios::out };
     
     cout << "Decoding: " << input_bin << " -> " << output_wav << endl;
-    cout << "Quantization bits: " << qbits << ", Channels: " << channels << endl;
+    cout << "Quantization bits: " << qbits << ", Channels: " << nchannels << ", Sample rate: " << sfinfo.samplerate << endl;
 
     vector<short> decoded_samples;
-    decoded_samples.reserve(FRAMES_BUFFER_SIZE * channels);
+    decoded_samples.reserve(FRAMES_BUFFER_SIZE * nchannels);
 	int shift_bits = 16 - qbits;
 
 	int quantized_value;
@@ -73,14 +62,14 @@ int main(int argc, char *argv[]) {
 		//debug_file << "Read: " << quantized_value << " -> " << quantized_unsigned << " -> " << signed_sample << "\n";
 		//debug_file << signed_sample << "\n";
 
-		if (decoded_samples.size() >= FRAMES_BUFFER_SIZE * channels) {
-			sndFileOut.writef(decoded_samples.data(), decoded_samples.size() / channels);
+		if (decoded_samples.size() >= FRAMES_BUFFER_SIZE * nchannels) {
+			sndFileOut.writef(decoded_samples.data(), decoded_samples.size() / nchannels);
 			decoded_samples.clear();
 		}
 	}
 
     if (!decoded_samples.empty()) {
-        sndFileOut.writef(decoded_samples.data(), decoded_samples.size() / channels);
+        sndFileOut.writef(decoded_samples.data(), decoded_samples.size() / nchannels);
     }
 	
 	//debug_file.close();

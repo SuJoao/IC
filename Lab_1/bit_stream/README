@@ -9,7 +9,7 @@ To test:
 
 	// exercise 6
 	cd test
-	../bin/wav_quant_enc <input file> <output file> <quantization bits>
+	../bin/wav_quant_enc <input wav file> <output bin file> <quantization bits>
 
-	../bin/wav_quant_dec <input file> <output file> <quantization bits> <channels>
+	../bin/wav_quant_dec <input bin file> <output wav file>
 

@@ -11,7 +11,7 @@ constexpr size_t FRAMES_BUFFER_SIZE = 65536;
 int main(int argc, char *argv[]) {
 
     if (argc < 4) {
-        cerr << "Usage: " << argv[0] << " <input file> <output file> <quant bits>\n";
+        cerr << "Usage: " << argv[0] << " <input wav file> <output bin file> <quant bits>\n";
         return 1;
     }
 
@@ -57,6 +57,10 @@ int main(int argc, char *argv[]) {
 	BitStream obs { ofs, STREAM_WRITE };
     size_t nFrames;
 	vector<short> samples(FRAMES_BUFFER_SIZE * sndFile.channels());
+
+    obs.write_n_bits(qbits, 8);
+    obs.write_n_bits(sndFile.channels(), 8);
+    obs.write_n_bits(sndFile.samplerate(), 32);
 
     while((nFrames = sndFile.readf(samples.data(), FRAMES_BUFFER_SIZE))) {
 		samples.resize(nFrames * sndFile.channels());
