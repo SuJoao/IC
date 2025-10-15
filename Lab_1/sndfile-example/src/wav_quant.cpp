@@ -38,15 +38,15 @@ int main(int argc, char *argv[]) {
 		return 1;
     }
 
-	int bin = stoi(argv[3]);
-	if (bin <= 0 || bin > 16) {
+	int qbits = stoi(argv[3]);
+	if (qbits <= 0 || qbits > 16) {
 		cerr << "Error: Number of quantization bits must be between 1 and 16\n";
 	    return 1;
 	}
 
 	size_t nFrames;
 	vector<short> samples(FRAMES_BUFFER_SIZE * sndFile.channels());
-	WAVQuant quant {bin };
+	WAVQuant quant {qbits};
 	while((nFrames = sndFile.readf(samples.data(), FRAMES_BUFFER_SIZE))) {
 		samples.resize(nFrames * sndFile.channels());
         quant.quantization(samples);

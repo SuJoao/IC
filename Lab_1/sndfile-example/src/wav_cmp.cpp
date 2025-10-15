@@ -5,79 +5,107 @@
 
 using namespace std;
 
+constexpr size_t FRAMES_BUFFER_SIZE = 65536;
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        cerr << "Usage: " << argv[0] << " <input file> <output file>\n";
+        cerr << "Usage: " << argv[0] << " <first sample> <second sample>\n";
         return 1;
     }
 
-    SndfileHandle sndOrig { argv[1] };
-    if (sndOrig.error()) {
-        cerr << "Error: invalid input file\n";
+    SndfileHandle sndFile1{ argv[1] };
+    SndfileHandle sndFile2{ argv[2] };
+
+    if (sndFile1.error() || sndFile2.error()) {
+        cerr << "Error: invalid input file(s)\n";
         return 1;
     }
 
-    SndfileHandle sndProc { argv[2] };
-    if (sndProc.error()) {
-        cerr << "Error: invalid output file\n";
+    if ((sndFile1.format() & SF_FORMAT_TYPEMASK) != SF_FORMAT_WAV ||
+        (sndFile2.format() & SF_FORMAT_TYPEMASK) != SF_FORMAT_WAV) {
+        cerr << "Error: files must be WAV format\n";
         return 1;
     }
 
-    if (sndOrig.channels() != sndProc.channels() || sndOrig.frames() != sndProc.frames()) {
-        cerr << "Error: files must have the same number of channels and frames\n";
+    if ((sndFile1.format() & SF_FORMAT_SUBMASK) != SF_FORMAT_PCM_16 ||
+        (sndFile2.format() & SF_FORMAT_SUBMASK) != SF_FORMAT_PCM_16) {
+        cerr << "Error: files must be 16-bit PCM\n";
         return 1;
     }
 
-    size_t channels = sndOrig.channels();
-    size_t frames = sndOrig.frames();
+    if (sndFile1.channels() != sndFile2.channels()) {
+        cerr << "Error: files must have the same number of channels\n";
+        return 1;
+    }
 
-    vector<long long> MSE(channels, 0);       // Mean Squared Error Vector
-    vector<short> maxError(channels, 0);       // Max Absolute Error Vector
-    vector<long long> signalEnergy(channels, 0); // Original Signal Energy Vector
+    int numChannels = sndFile1.channels();
+    size_t numFrames = static_cast<size_t>(min(sndFile1.frames(), sndFile2.frames()));
 
-    vector<short> originalSamples(frames * channels);
-    vector<short> processedSamples(frames * channels);
+    vector<short> buffer1(FRAMES_BUFFER_SIZE * numChannels);
+    vector<short> buffer2(FRAMES_BUFFER_SIZE * numChannels);
 
-    sndOrig.readf(originalSamples.data(), frames);
-    sndProc.readf(processedSamples.data(), frames);
+    vector<double> rmse(numChannels, 0.0);
+    vector<double> maxErr(numChannels, 0.0);
+    vector<double> snr(numChannels, 0.0);
 
-    for (size_t i = 0; i < frames; i++) {
-        long long sumChannels = 0;
-        for (size_t channel = 0; channel < channels; channel++) {
-            size_t idx = (i * channels) + channel;
-            short diff = originalSamples[idx] - processedSamples[idx];
-            MSE[channel] += diff * diff;
-            if (abs(diff) > maxError[channel]) maxError[channel] = abs(diff);
-            signalEnergy[channel] += originalSamples[idx] * originalSamples[idx];
-            sumChannels += diff * diff;
+    vector<double> errEnergy(numChannels, 0.0);
+    vector<double> sigEnergy(numChannels, 0.0);
+
+    // buffer = [L0, R0, L1, R1, L2, R2]
+    // frame = [L0, R0], [L1, R1], [L2, R2]
+    // sample = L0, R0, L1, R1, L2, R2
+
+    while (true) {
+        sf_count_t framesRead1 = sndFile1.readf(buffer1.data(), FRAMES_BUFFER_SIZE);
+        sf_count_t framesRead2 = sndFile2.readf(buffer2.data(), FRAMES_BUFFER_SIZE);
+
+        if (framesRead1 == 0 || framesRead2 == 0)
+            break;
+
+        size_t framesToProcess = static_cast<size_t>(min(framesRead1, framesRead2));
+
+        for (size_t i = 0; i < framesToProcess; ++i) {
+            for (int ch = 0; ch < numChannels; ++ch) {
+                size_t idx = i * numChannels + ch;
+                double s1 = buffer1[idx];
+                double s2 = buffer2[idx];
+                double diff = s1 - s2;
+
+                errEnergy[ch] += diff * diff;
+                sigEnergy[ch] += s1 * s1;
+                maxErr[ch] = max(maxErr[ch], fabs(diff));
+            }
         }
     }
+    
 
-    for (size_t channel = 0; channel < channels; channel++) {
-        double mseValue = (static_cast<double>(MSE[channel]) / frames);
-        double snr = (10.0 * log10(static_cast<double>(signalEnergy[channel]) / MSE[channel]));
-        cout << "Channel " << (channel + 1) << ":\n";
-        cout << "MSE: " << mseValue << "\n";
-        cout << "Max Error: " << maxError[channel] << "\n";
-        cout << "SNR: " << snr << "\n";
+    // RMSE and SNR
+    for (int ch = 0; ch < numChannels; ++ch) {
+        rmse[ch] = sqrt(errEnergy[ch] / numFrames);
+        snr[ch] = (errEnergy[ch] == 0.0) ? INFINITY : 10 * log10(sigEnergy[ch] / errEnergy[ch]);
     }
 
-    long long mseMean = 0;
-    long long maxErrorMean = 0;
-    long long signalEnergyMean = 0;
-    for (size_t channel = 0; channel < channels; channel++) {
-        mseMean += MSE[channel];
-        signalEnergyMean += signalEnergy[channel];
-        if (maxError[channel] > maxErrorMean) maxErrorMean = maxError[channel];
+    // Averages
+    double avgRMSE = 0.0, avgMaxErr = 0.0, avgSNR = 0.0;
+    for (int ch = 0; ch < numChannels; ++ch) {
+        avgRMSE += rmse[ch];
+        avgMaxErr += maxErr[ch];
+        avgSNR += snr[ch];
+    }
+    avgRMSE /= numChannels;
+    avgMaxErr /= numChannels;
+    avgSNR /= numChannels;
+
+
+    for (int ch = 0; ch < numChannels; ++ch) {
+        cout << "Channel " << ch << " RMSE: " << rmse[ch] << endl;
+        cout << "Channel " << ch << " Max error: " << maxErr[ch] << endl;
+        cout << "Channel " << ch << " SNR: " << snr[ch] << " dB" << endl;
     }
 
-    double mseValMean = mseMean / double(frames * channels);
-    double snrMean = 10.0 * log10(double(signalEnergyMean) / mseMean);
-
-    cout << "Average of All Channels:\n";
-    cout << "MSE: " << mseValMean << "\n";
-    cout << "Max Error: " << maxErrMean << "\n";
-    cout << "SNR: " << snrMean << "\n";
+    cout << "Average RMSE: " << avgRMSE << endl;
+    cout << "Average Max error: " << avgMaxErr << endl;
+    cout << "Average SNR: " << avgSNR << " dB" << endl;
 
     return 0;
 }

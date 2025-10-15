@@ -9,7 +9,27 @@ To test:
 	
 
 	// exercise 1
-	../bin/wav_hist <input file> <channel> <bin>
+	../bin/wav_hist <input sample file> <channel> <bin>
 
 	// exercise 2
-	../bin/wav_quant <input file> <output file> <quantization bits>
+	../bin/wav_quant <input sample file> <output sample file> <quantization bits>
+
+	// exercise 3
+	../bin/wav_cmp <original sample file> <quantized sample file>
+
+
+To generate histogram figures (requires gnuplot):
+	cd test
+	./get_hist_figs.sh <sample file>
+
+To generate quantization figures (requires gnuplot):
+	cd test
+	./get_quant_figs.sh <sample file>
+
+To generate comparison figures (requires gnuplot and matplotlib):
+	cd test
+	./get_cmp_figs.sh <original sample file> <quantized sample file>
+
+To clean up generated files (.png, .dat, .wav):
+	cd test
+	./clean.sh

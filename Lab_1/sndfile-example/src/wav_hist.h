@@ -42,17 +42,17 @@ class WAVHist {
 		for(size_t i = 0; i < samples.size(); i++) {
 			short idx = samples[i] >> bin;
 			idx =  idx << bin;
-			idx += idx >= 0 ? idx + pow(2, bin) : idx - pow(2, bin);
+			//idx += idx >= 0 ? idx + pow(2, bin) : idx - pow(2, bin);
 			counts[n++ % sfh_channels][idx]++;
 
 			if(i > 0 && i % 2 != 0 && (sfh_channels == 2)) {
 				int left = (int)samples[i-1] >> bin;
 				left =  left << bin;
-				left += left >= 0 ? left + pow(2, bin) : left - pow(2, bin);
+				//left += left >= 0 ? left + pow(2, bin) : left - pow(2, bin);
 
 				int right = (int)samples[i] >> bin;
 				right =  right << bin;
-				right += right >= 0 ? right + pow(2, bin) : right - pow(2, bin);
+				//right += right >= 0 ? right + pow(2, bin) : right - pow(2, bin);
 
 				counts[2][(short)((left + right) / 2)]++;
 				counts[3][(short)((left - right) / 2)]++;
