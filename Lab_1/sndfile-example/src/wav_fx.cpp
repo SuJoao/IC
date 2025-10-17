@@ -140,8 +140,11 @@ int main(int argc, char *argv[]) {
 		}
     } else if (filterType == "fade_in") {
         process_function = [&fx](const std::vector<short>& samples, echo_params* params) { return fx.fade_in_buffer(samples, params); };
+		fx.fade_setup(duration, echo1);
     } else if (filterType == "fade_out") {
         process_function = [&fx](const std::vector<short>& samples, echo_params* params) { return fx.fade_out_buffer(samples, params); };
+		fx.fade_setup(duration, echo1);
+		echo1->endTrackIndex = totalSamples;
     }
 
 

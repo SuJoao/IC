@@ -117,6 +117,7 @@ struct echo_params
     long long int fadeInEndIndex = 0;
     long long int fadeOutStartIndex = 0;
     long long int endTrackIndex = 0;
+    int fade_attack = 2;
     
     bool hold = false;
     bool finished = false;
@@ -278,6 +279,11 @@ class WAVfx {
             short echoedSample = multi_echo_sample(sample, customParams);
             output.push_back(echoedSample);
         }
+
+        if (customParams->finished && samples.empty())
+        {
+            return empty_buffer([this](short sample, echo_params* params) { return multi_echo_sample(sample, params); }, customParams);
+        }
         return output;
     }
 
@@ -309,8 +315,7 @@ class WAVfx {
     std::vector<short> fade_out_buffer(const std::vector<short>& samples, echo_params* customParams = nullptr) {
         std::vector<short> output;
         output.reserve(samples.size());
-        customParams->fadeOutStartIndex = customParams->duration * 44100 * customParams->channels;
-        customParams->endTrackIndex = customParams->fadeOutStartIndex + (customParams->duration * 44100 * customParams->channels);
+        customParams->fadeOutStartIndex = customParams->endTrackIndex - (customParams->duration * 44100 * customParams->channels);
 
         for(const short& sample : samples) {
             short echoedSample = fadeout_sample(sample, customParams);
@@ -457,6 +462,11 @@ class WAVfx {
         {
             float fadeFactor = (static_cast<float>(customParams->sampleIndex)) / (static_cast<float>(customParams->fadeInEndIndex));
             output = static_cast<short>(sample * fadeFactor);
+            for (size_t i = 0; i < customParams->fade_attack - 1; i++)
+            {
+                output *= fadeFactor;
+            }
+            
             customParams->sampleIndex++;
         } else {
             output = sample;
@@ -473,6 +483,10 @@ class WAVfx {
             float fadeFactor = 1.0f - (static_cast<float>(customParams->sampleIndex - customParams->fadeOutStartIndex) / static_cast<float>(customParams->endTrackIndex - customParams->fadeOutStartIndex));
             fadeFactor = fadeFactor < 0 ? 0 : fadeFactor;
             output = static_cast<short>(sample * fadeFactor);
+            for (size_t i = 0; i < customParams->fade_attack - 1; i++)
+            {
+                output *= fadeFactor;
+            }
             customParams->sampleIndex++;
         } else {
             output = sample;
