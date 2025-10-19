@@ -13,3 +13,8 @@ To test:
 
 	../bin/wav_quant_dec <input bin file> <output wav file>
 
+	// exercise 7
+	cd test
+	../bin/wav_lossy_enc <input wav file> <output bin file> <quantization bits> <block size>
+	
+	../bin/wav_lossy_dec <input bin file> <output wav file>

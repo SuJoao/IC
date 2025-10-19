@@ -24,3 +24,9 @@ target_link_libraries(wavquantenc sndfile)
 add_executable(wavquantdec wav_quant_dec.cpp $<TARGET_OBJECTS:Common>)
 target_link_libraries(wavquantdec sndfile)
 
+add_executable(wavlossyenc wav_lossy_enc.cpp $<TARGET_OBJECTS:Common>)
+target_link_libraries(wavlossyenc sndfile fftw3)
+
+add_executable(wavlossydec wav_lossy_dec.cpp $<TARGET_OBJECTS:Common>)
+target_link_libraries(wavlossydec sndfile fftw3)
+
