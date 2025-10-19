@@ -4,6 +4,8 @@
 #include <sndfile.hh>
 #include <fstream>
 #include <fftw3.h>
+#include <cstring>
+#include <chrono>
 #include "bit_stream.h"
 
 using namespace std;
@@ -11,6 +13,8 @@ using namespace std;
 size_t BLOCK_SIZE = 1024;
 
 int main(int argc, char *argv[]) {
+    auto start_time = chrono::high_resolution_clock::now();
+
     if (argc < 4) {
         cerr << "Usage: " << argv[0]
              << " <input wav> <output bin> <quant_bits> <block_size>\n";
@@ -37,7 +41,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    if(argc >=5 ) {
+    if (argc >= 5) {
         BLOCK_SIZE = static_cast<size_t>(stoi(argv[4]));
         if (BLOCK_SIZE == 0) {
             cerr << "Error: block size must be positive\n";
@@ -56,7 +60,7 @@ int main(int argc, char *argv[]) {
     // header
     obs.write_n_bits(qbits, 8);
     obs.write_n_bits(sndFile.samplerate(), 32);
-    obs.write_n_bits(BLOCK_SIZE, 16);
+    obs.write_n_bits(static_cast<uint32_t>(BLOCK_SIZE), 16);
     obs.write_n_bits(1, 8);
 
     int channels = sndFile.channels();
@@ -64,12 +68,10 @@ int main(int argc, char *argv[]) {
     vector<double> block(BLOCK_SIZE);
 
     fftw_plan plan_dct = fftw_plan_r2r_1d(
-        BLOCK_SIZE, block.data(), block.data(),
+        static_cast<int>(BLOCK_SIZE), block.data(), block.data(),
         FFTW_REDFT10, FFTW_ESTIMATE);
 
     size_t nFrames;
-    int shiftBits = 16 - qbits;
-
     while ((nFrames = sndFile.readf(input.data(), BLOCK_SIZE))) {
         // get mono channel
         for (size_t i = 0; i < nFrames; i++) {
@@ -86,12 +88,33 @@ int main(int argc, char *argv[]) {
         // apply DCT
         fftw_execute(plan_dct);
 
-       // scale DCT coefficients before quantization
-        for (size_t i = 0; i < BLOCK_SIZE; i++) {
-            double scaled = block[i] / (BLOCK_SIZE * 2);
-            int32_t unsigned_value = static_cast<int32_t>(scaled + 32768);
-            uint16_t quantized_value = unsigned_value >> shiftBits;
-            obs.write_n_bits(quantized_value, qbits);
+        // normalize DCT coefficients and get scale
+        double inv_norm = 1.0 / (2.0 * static_cast<double>(BLOCK_SIZE));
+        double maxabs = 0.0;
+        for (size_t i = 0; i < BLOCK_SIZE; ++i){
+            block[i] *= inv_norm;
+            maxabs = max(maxabs, fabs(block[i]));
+        }
+
+        // get [-max_q, max_q] and calculate scale
+        int32_t max_q = (1 << (qbits - 1)) - 1;
+        double scale = (maxabs > 0.0) ? (static_cast<double>(max_q) / maxabs) : 1.0;
+
+        // save scale as 32-bit float 
+        uint32_t scale_bits;
+        float scale_f = static_cast<float>(scale);
+        memcpy(&scale_bits, &scale_f, 4);
+        obs.write_n_bits(scale_bits, 32);
+
+        // quantize dct coefficients and write
+        uint32_t mask = (1u << qbits) - 1u;
+        for (size_t i = 0; i < BLOCK_SIZE; ++i) {
+            double scaled = block[i] * scale;
+            int32_t q = static_cast<int32_t>(round(scaled));
+            if (q > max_q) q = max_q;
+            if (q < -max_q - 1) q = -max_q - 1;
+            uint32_t packed = static_cast<uint32_t>(q) & mask;
+            obs.write_n_bits(packed, qbits);
         }
     }
 
@@ -99,6 +122,10 @@ int main(int argc, char *argv[]) {
     obs.close();
     ofs.close();
 
+    auto end_time = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
+
     cout << "Encoding done. Stereo → mono + DCT quantized to " << qbits << " bits." << endl;
+    cout << "Time elapsed: " << duration.count() << " ms" << endl;
     return 0;
 }
