@@ -8,6 +8,7 @@ int main(int argc, char *argv[]) {
 
     if (argc < 4) {
         cerr << "Usage: " << argv[0] << " <input ppm file> <output ppm file> <channel>\n";
+        cerr << "Channel: 0 (Red), 1 (Green), 2 (Blue)\n";
         return 1;
     }
 
