@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
         }
     } else {
         std::cerr << "Error: Unsupported number of channels: " << image.channels() << std::endl;
-        std::cerr << "This code only supports 1-channel (grayscale) or 3-channel (color) images." << std::endl;
+        std::cerr << "This code only supports 3-channel (color) images." << std::endl;
         return -1;
     }
 
