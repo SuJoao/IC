@@ -24,27 +24,27 @@ void rotate(int* x, int* y, int times, int img_width, int img_height) {
 }
 
 int main(int argc, char* argv[]) {
-    
+
     if (argc < 4) {
         cerr << "Usage: " << argv[0] << " <input ppm file> <output ppm file> <rotation>\n";
         cerr << "Rotations (clockwise):\n";
-        cerr << "  0 - No rotation\n";
-        cerr << "  1 - 90 degrees\n";
-        cerr << "  2 - 180 degrees\n";
-        cerr << "  3 - 270 degrees\n";
+        cerr << "  0 - 90 degrees\n";
+        cerr << "  1 - 180 degrees\n";
+        cerr << "  2 - 270 degrees\n";
+        cerr << "  3 - 360 degrees\n";
         return 1;
     }
 
     string input_filename = argv[1];
     string output_filename = argv[2];
     int rotation_input = stoi(argv[3]);
-    
+
     if (rotation_input < 0 || rotation_input > 3) {
         cerr << "Error: Rotation must be 0, 1, 2, or 3\n";
         return 1;
     }
-    
-    int rotations = rotation_input;
+
+    int rotations = (rotation_input + 1) % 4;
 
     cv::Mat image = cv::imread(input_filename);
 
@@ -58,11 +58,11 @@ int main(int argc, char* argv[]) {
     int new_image_height = (rotations % 2 == 0) ? image.rows : image.cols;
     cv::Mat result_image = cv::Mat(new_image_height, new_image_width, image.type());
 
-    std::cout << "Processing image: " << image.cols << "x" << image.rows 
+    std::cout << "Processing image: " << image.cols << "x" << image.rows
               << " with " << image.channels() << " channels." << std::endl;
 
-    
-    if (image.channels() == 3) {        
+
+    if (image.channels() == 3) {
         for (int y = 0; y < image.rows; ++y) {
             for (int x = 0; x < image.cols; ++x) {
 
