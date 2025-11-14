@@ -63,47 +63,83 @@ inline int predict_from_order(const std::vector<short> &samples, size_t idx, int
 
 size_t BLOCK_SIZE = 1024;
 
+void print_usage(const char* prog_name) {
+    cout << "Usage: " << prog_name << " <input.wav> <output.bin> [options]\n\n";
+    cout << "Required:\n";
+    cout << "  <input.wav>       Input WAV file (stereo, PCM_16)\n";
+    cout << "  <output.bin>      Output binary file\n\n";
+    cout << "Options:\n";
+    cout << "  -b <block_size>   Block size for encoding (default: 1024)\n";
+    cout << "  -p <order>        Predictor order 0-3 (default: 1)\n";
+    cout << "  -m <method>       Negative handling method:\n";
+    cout << "                    'zigzag', 'sign_magnitude'\n";
+    cout << "                    (default: zigzag)\n\n";
+    cout << "Examples:\n";
+    cout << "  " << prog_name << " input.wav output.bin\n";
+    cout << "  " << prog_name << " input.wav output.bin -b 2048 -p 2\n";
+    cout << "  " << prog_name << " input.wav output.bin -m sign_magnitude\n";
+}
+
+NegativeHandling parse_method(const char* method_str) {
+    if (strcmp(method_str, "zigzag") == 0) {
+        return ZIGZAG;
+    } else if (strcmp(method_str, "sign_magnitude") == 0) {
+        return SIGN_MAGNITUDE;
+    } else {
+        cerr << "Error: Invalid method. Use 'zigzag', 'sign_magnitude', or 'golomb_method'\n";
+        exit(1);
+    }
+}
+
 int main(int argc, char *argv[]) {
     auto start_time = chrono::high_resolution_clock::now();
 
     if (argc < 3) {
-        cerr << "Usage: " << argv[0] << " <input wav> <output bin> [block_size] [predictor_order(0-4)]\n";
+        print_usage(argv[0]);
         return 1;
     }
 
+    string input_file = argv[1];
+    string output_file = argv[2];
     int predictor_order = 1;
+    NegativeHandling method = ZIGZAG; // default
 
-    if (argc >= 4) {
-        try {
-            long bs = stol(argv[3]);
-            if (bs <= 0) {
-                cerr << "Error: block size must be positive\n";
+    // Parse optional arguments starting from argv[3]
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "-b") == 0 && i + 1 < argc) {
+            try {
+                long bs = stol(argv[++i]);
+                if (bs <= 0) {
+                    cerr << "Error: block size must be positive\n";
+                    return 1;
+                }
+                BLOCK_SIZE = static_cast<size_t>(bs);
+            } catch (...) {
+                cerr << "Error: invalid block size\n";
                 return 1;
             }
-            BLOCK_SIZE = static_cast<size_t>(bs);
-        }
-        catch (...) {
-            cerr << "Error: invalid block size\n";
+        } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+            try {
+                int po = stoi(argv[++i]);
+                if (po < 0 || po > 3) {
+                    cerr << "Error: predictor_order must be between 0 and 3\n";
+                    return 1;
+                }
+                predictor_order = po;
+            } catch (...) {
+                cerr << "Error: invalid predictor order\n";
+                return 1;
+            }
+        } else if (strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
+            method = parse_method(argv[++i]);
+        } else {
+            cerr << "Error: Unknown option '" << argv[i] << "'\n";
+            print_usage(argv[0]);
             return 1;
         }
     }
 
-    if (argc >= 5) {
-        try {
-            int po = stoi(argv[4]);
-            if (po < 0 || po > 4) {
-                cerr << "Error: predictor_order must be between 0 and 4\n";
-                return 1;
-            }
-            predictor_order = po;
-        }
-        catch (...) {
-            cerr << "Error: invalid predictor order\n";
-            return 1;
-        }
-    }
-
-    SndfileHandle sndFile{argv[1]};
+    SndfileHandle sndFile{input_file.c_str()};
     if (sndFile.error()) {
         cerr << "Error: invalid input file\n";
         return 1;
@@ -123,7 +159,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    fstream ofs{argv[2], ios::out | ios::binary};
+    fstream ofs{output_file, ios::out | ios::binary};
     if (!ofs.is_open()) {
         cerr << "Error opening output file\n";
         return 1;
@@ -137,12 +173,13 @@ int main(int argc, char *argv[]) {
     //    debug_file << "block,sample,mid_residual,side_residual\n";
     //}
 
-    // header: samplerate (32 bits), frames (32 bits), block_size (16 bits), channels (8 bits), predictor_order (8 bits)
+    // header: samplerate (32 bits), frames (32 bits), block_size (16 bits), channels (8 bits), predictor_order (8 bits), method (8 bits)
     obs.write_n_bits(static_cast<uint32_t>(sndFile.samplerate()), 32);
     obs.write_n_bits(static_cast<uint32_t>(sndFile.frames()), 32);
     obs.write_n_bits(static_cast<uint32_t>(BLOCK_SIZE), 16);
     obs.write_n_bits(static_cast<uint32_t>(channels), 8);
     obs.write_n_bits(static_cast<uint32_t>(predictor_order), 8);
+    obs.write_n_bits(static_cast<uint32_t>(method), 8);
 
     vector<short> block_samples(BLOCK_SIZE * channels);
     vector<short> mid(BLOCK_SIZE);
@@ -183,8 +220,8 @@ int main(int argc, char *argv[]) {
         obs.write_n_bits(mid_m, 32);
         obs.write_n_bits(side_m, 32);
 
-        GolombUtils golomb_mid(mid_m, ZIGZAG);
-        GolombUtils golomb_side(side_m, ZIGZAG);
+        GolombUtils golomb_mid(mid_m, method);
+        GolombUtils golomb_side(side_m, method);
 
         // Determine initial samples to encode directly
         size_t warmup = static_cast<size_t>(predictor_order);

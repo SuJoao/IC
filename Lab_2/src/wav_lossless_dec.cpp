@@ -57,6 +57,7 @@ int main(int argc, char *argv[]) {
     size_t BLOCK_SIZE = static_cast<size_t>(ibs.read_n_bits(16));
     int channels = ibs.read_n_bits(8);
     int predictor_order = ibs.read_n_bits(8);
+    NegativeHandling method = static_cast<NegativeHandling>(ibs.read_n_bits(8));
 
     if (channels != 2) {
         cerr << "Only stereo (2 channels) supported\n";
@@ -84,8 +85,8 @@ int main(int argc, char *argv[]) {
             int side_m = ibs.read_n_bits(32);
             if(side_m == EOF) break;
 
-            GolombUtils golomb_mid(mid_m, ZIGZAG);
-            GolombUtils golomb_side(side_m, ZIGZAG);
+            GolombUtils golomb_mid(mid_m, method);
+            GolombUtils golomb_side(side_m, method);
 
             size_t frames_to_decode = BLOCK_SIZE;
             if (frames_written + BLOCK_SIZE > total_frames) {
