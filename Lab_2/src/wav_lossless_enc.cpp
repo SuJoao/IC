@@ -73,11 +73,14 @@ void print_usage(const char* prog_name) {
     cout << "  -p <order>        Predictor order 0-3 (default: 1)\n";
     cout << "  -m <method>       Negative handling method:\n";
     cout << "                    'zigzag', 'sign_magnitude'\n";
-    cout << "                    (default: zigzag)\n\n";
+    cout << "                    (default: zigzag)\n";
+    cout << "  -gd               Use dynamic Golomb m (default)\n";
+    cout << "  -gs <m_value>     Use static Golomb m value\n\n";
     cout << "Examples:\n";
     cout << "  " << prog_name << " input.wav output.bin\n";
     cout << "  " << prog_name << " input.wav output.bin -b 2048 -p 2\n";
     cout << "  " << prog_name << " input.wav output.bin -m sign_magnitude\n";
+    cout << "  " << prog_name << " input.wav output.bin -gs 8\n";
 }
 
 NegativeHandling parse_method(const char* method_str) {
@@ -86,7 +89,7 @@ NegativeHandling parse_method(const char* method_str) {
     } else if (strcmp(method_str, "sign_magnitude") == 0) {
         return SIGN_MAGNITUDE;
     } else {
-        cerr << "Error: Invalid method. Use 'zigzag', 'sign_magnitude', or 'golomb_method'\n";
+        cerr << "Error: Invalid method. Use 'zigzag', 'sign_magnitude''\n";
         exit(1);
     }
 }
@@ -103,6 +106,8 @@ int main(int argc, char *argv[]) {
     string output_file = argv[2];
     int predictor_order = 1;
     NegativeHandling method = ZIGZAG; // default
+    bool use_dynamic_m = true; // default to dynamic
+    uint32_t static_m_value = 1;
 
     // Parse optional arguments starting from argv[3]
     for (int i = 3; i < argc; i++) {
@@ -132,6 +137,21 @@ int main(int argc, char *argv[]) {
             }
         } else if (strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
             method = parse_method(argv[++i]);
+        } else if (strcmp(argv[i], "-gd") == 0) {
+            use_dynamic_m = true;
+        } else if (strcmp(argv[i], "-gs") == 0 && i + 1 < argc) {
+            try {
+                int m = stoi(argv[++i]);
+                if (m <= 0) {
+                    cerr << "Error: static m value must be positive\n";
+                    return 1;
+                }
+                static_m_value = static_cast<uint32_t>(m);
+                use_dynamic_m = false;
+            } catch (...) {
+                cerr << "Error: invalid static m value\n";
+                return 1;
+            }
         } else {
             cerr << "Error: Unknown option '" << argv[i] << "'\n";
             print_usage(argv[0]);
@@ -173,13 +193,18 @@ int main(int argc, char *argv[]) {
     //    debug_file << "block,sample,mid_residual,side_residual\n";
     //}
 
-    // header: samplerate (32 bits), frames (32 bits), block_size (16 bits), channels (8 bits), predictor_order (8 bits), method (8 bits)
+    // header: samplerate (32 bits), frames (32 bits), block_size (16 bits), channels (8 bits), predictor_order (8 bits), method (8 bits), use_dynamic_m (1 bit)
     obs.write_n_bits(static_cast<uint32_t>(sndFile.samplerate()), 32);
     obs.write_n_bits(static_cast<uint32_t>(sndFile.frames()), 32);
     obs.write_n_bits(static_cast<uint32_t>(BLOCK_SIZE), 16);
     obs.write_n_bits(static_cast<uint32_t>(channels), 8);
     obs.write_n_bits(static_cast<uint32_t>(predictor_order), 8);
     obs.write_n_bits(static_cast<uint32_t>(method), 8);
+    obs.write_n_bits(use_dynamic_m ? 1 : 0, 1);
+
+    if (!use_dynamic_m) {
+        obs.write_n_bits(static_m_value, 32);
+    }
 
     vector<short> block_samples(BLOCK_SIZE * channels);
     vector<short> mid(BLOCK_SIZE);
@@ -201,24 +226,29 @@ int main(int argc, char *argv[]) {
             side[i] = L - R;
         }
 
-        // get optimal m values for mid
-        double mid_mean = mean_abs(mid, nFrames);
-        double mid_alpha = mid_mean / (mid_mean + 1.0);
-        if (mid_alpha < 0.001) mid_alpha = 0.001;
-        if (mid_alpha > 0.999) mid_alpha = 0.999;
-        uint32_t mid_m = ceil(-1 / log(mid_alpha));
-        if (mid_m < 1) mid_m = 1;
+        uint32_t mid_m, side_m;
+        mid_m = static_m_value;
+        side_m = static_m_value;
 
-        // get optimal m values for mid
-        double side_mean = mean_abs(side, nFrames);
-        double side_alpha = side_mean / (side_mean + 1.0);
-        if (side_alpha < 0.001) side_alpha = 0.001;
-        if (side_alpha > 0.999) side_alpha = 0.999;
-        uint32_t side_m = ceil(-1 / log(side_alpha));
-        if (side_m < 1) side_m = 1;
+        if (use_dynamic_m) {
+            // Calculate optimal m values dynamically
+            double mid_mean = mean_abs(mid, nFrames);
+            double mid_alpha = mid_mean / (mid_mean + 1.0);
+            if (mid_alpha < 0.001) mid_alpha = 0.001;
+            if (mid_alpha > 0.999) mid_alpha = 0.999;
+            mid_m = ceil(-1 / log(mid_alpha));
+            if (mid_m < 1) mid_m = 1;
 
-        obs.write_n_bits(mid_m, 32);
-        obs.write_n_bits(side_m, 32);
+            double side_mean = mean_abs(side, nFrames);
+            double side_alpha = side_mean / (side_mean + 1.0);
+            if (side_alpha < 0.001) side_alpha = 0.001;
+            if (side_alpha > 0.999) side_alpha = 0.999;
+            side_m = ceil(-1 / log(side_alpha));
+            if (side_m < 1) side_m = 1;
+
+            obs.write_n_bits(mid_m, 32);
+            obs.write_n_bits(side_m, 32);
+        }
 
         GolombUtils golomb_mid(mid_m, method);
         GolombUtils golomb_side(side_m, method);
@@ -253,7 +283,7 @@ int main(int argc, char *argv[]) {
 
     obs.close();
     ofs.close();
-    
+
     //if (debug_file.is_open()) {
     //    debug_file.close();
     //    cout << "Residuals written to residuals_debug.txt\n";

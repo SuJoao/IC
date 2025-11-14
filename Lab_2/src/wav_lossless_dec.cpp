@@ -58,6 +58,12 @@ int main(int argc, char *argv[]) {
     int channels = ibs.read_n_bits(8);
     int predictor_order = ibs.read_n_bits(8);
     NegativeHandling method = static_cast<NegativeHandling>(ibs.read_n_bits(8));
+    bool use_dynamic_m = ibs.read_n_bits(1) == 1;
+
+    uint32_t static_m_value = 0;
+    if (!use_dynamic_m) {
+        static_m_value = ibs.read_n_bits(32);
+    }
 
     if (channels != 2) {
         cerr << "Only stereo (2 channels) supported\n";
@@ -76,14 +82,20 @@ int main(int argc, char *argv[]) {
     vector<short> side(BLOCK_SIZE);
 
     size_t frames_written = 0;
+    int mid_m, side_m;
+
+    mid_m = static_m_value;
+    side_m = static_m_value;
 
     try {
         while (frames_written < total_frames) {
 
-            int mid_m = ibs.read_n_bits(32);
-            if(mid_m == EOF) break;
-            int side_m = ibs.read_n_bits(32);
-            if(side_m == EOF) break;
+            if (use_dynamic_m) {
+                mid_m = ibs.read_n_bits(32);
+                if(mid_m == EOF) break;
+                side_m = ibs.read_n_bits(32);
+                if(side_m == EOF) break;
+            }
 
             GolombUtils golomb_mid(mid_m, method);
             GolombUtils golomb_side(side_m, method);
