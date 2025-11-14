@@ -1,0 +1,230 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <sndfile.hh>
+#include <numeric>
+#include <fstream>
+#include <cstring>
+#include <chrono>
+#include "bit_stream/src/bit_stream.h"
+#include "GolombUtils.h"
+
+enum PredictionMode {
+    order0 = 0,
+    order1 = 1,
+    order2 = 2,
+    order3 = 3,
+};
+
+using namespace std;
+
+double mean_abs(const std::vector<short> &values, size_t nFrames) {
+    if (values.empty())
+        return 0.0;
+    double sum_abs = std::accumulate(values.begin(), values.end(), 0.0,
+                                     [](double acc, short v)
+                                     {
+                                         return acc + std::abs(static_cast<double>(v));
+                                     });
+    return sum_abs / static_cast<double>(nFrames);
+}
+
+inline int floor_div2(int x) {
+    if (x >= 0)
+        return x / 2;
+    return -((-x + 1) / 2);
+}
+
+inline int predict_from_order(const std::vector<short> &samples, size_t idx, int order) {
+    switch (order) {
+    case 0:
+        return 0;
+    case 1:
+        return static_cast<int>(samples[idx - 1]);
+    case 2:
+    {
+        int a = samples[idx - 1];
+        int b = samples[idx - 2];
+        // 2*a - b
+        return 2 * a - b;
+    }
+    case 3:
+    {
+        int a = samples[idx - 1];
+        int b = samples[idx - 2];
+        int c = samples[idx - 3];
+        // 3*a - 3*b + c
+        return 3 * a - 3 * b + c;
+    }
+    default:
+        return static_cast<int>(samples[idx - 1]);
+    }
+}
+
+size_t BLOCK_SIZE = 1024;
+
+int main(int argc, char *argv[]) {
+    auto start_time = chrono::high_resolution_clock::now();
+
+    if (argc < 3) {
+        cerr << "Usage: " << argv[0] << " <input wav> <output bin> [block_size] [predictor_order(0-4)]\n";
+        return 1;
+    }
+
+    int predictor_order = 1;
+
+    if (argc >= 4) {
+        try {
+            long bs = stol(argv[3]);
+            if (bs <= 0) {
+                cerr << "Error: block size must be positive\n";
+                return 1;
+            }
+            BLOCK_SIZE = static_cast<size_t>(bs);
+        }
+        catch (...) {
+            cerr << "Error: invalid block size\n";
+            return 1;
+        }
+    }
+
+    if (argc >= 5) {
+        try {
+            int po = stoi(argv[4]);
+            if (po < 0 || po > 4) {
+                cerr << "Error: predictor_order must be between 0 and 4\n";
+                return 1;
+            }
+            predictor_order = po;
+        }
+        catch (...) {
+            cerr << "Error: invalid predictor order\n";
+            return 1;
+        }
+    }
+
+    SndfileHandle sndFile{argv[1]};
+    if (sndFile.error()) {
+        cerr << "Error: invalid input file\n";
+        return 1;
+    }
+    if ((sndFile.format() & SF_FORMAT_TYPEMASK) != SF_FORMAT_WAV) {
+        cerr << "Error: file is not WAV format\n";
+        return 1;
+    }
+    if ((sndFile.format() & SF_FORMAT_SUBMASK) != SF_FORMAT_PCM_16) {
+        cerr << "Error: file is not PCM_16 format\n";
+        return 1;
+    }
+
+    int channels = sndFile.channels();
+    if (channels != 2) {
+        cerr << "Error: input file must be stereo (2 channels) for mid/side.\n";
+        return 1;
+    }
+
+    fstream ofs{argv[2], ios::out | ios::binary};
+    if (!ofs.is_open()) {
+        cerr << "Error opening output file\n";
+        return 1;
+    }
+
+    BitStream obs{ofs, STREAM_WRITE};
+
+    // Debug: open residuals file
+    //fstream debug_file{"residuals_debug.txt", ios::out};
+    //if (debug_file.is_open()) {
+    //    debug_file << "block,sample,mid_residual,side_residual\n";
+    //}
+
+    // header: samplerate (32 bits), frames (32 bits), block_size (16 bits), channels (8 bits), predictor_order (8 bits)
+    obs.write_n_bits(static_cast<uint32_t>(sndFile.samplerate()), 32);
+    obs.write_n_bits(static_cast<uint32_t>(sndFile.frames()), 32);
+    obs.write_n_bits(static_cast<uint32_t>(BLOCK_SIZE), 16);
+    obs.write_n_bits(static_cast<uint32_t>(channels), 8);
+    obs.write_n_bits(static_cast<uint32_t>(predictor_order), 8);
+
+    vector<short> block_samples(BLOCK_SIZE * channels);
+    vector<short> mid(BLOCK_SIZE);
+    vector<short> side(BLOCK_SIZE);
+
+    //size_t block_num = 0;
+    size_t nFrames;
+    while ((nFrames = sndFile.readf(block_samples.data(), static_cast<int>(BLOCK_SIZE)))) {
+        // convert to mid/side for the frames read
+        for (size_t i = 0; i < nFrames; ++i) {
+            // L = block_samples[i*2 + 0], R = block_samples[i*2 + 1]
+            int L = block_samples[i * channels + 0];
+            int R = block_samples[i * channels + 1];
+
+            // mid = (L + R) / 2 (integer division, truncates toward zero)
+            mid[i] = floor_div2(L + R);
+
+            // side = L - R
+            side[i] = L - R;
+        }
+
+        // get optimal m values for mid
+        double mid_mean = mean_abs(mid, nFrames);
+        double mid_alpha = mid_mean / (mid_mean + 1.0);
+        if (mid_alpha < 0.001) mid_alpha = 0.001;
+        if (mid_alpha > 0.999) mid_alpha = 0.999;
+        uint32_t mid_m = ceil(-1 / log(mid_alpha));
+        if (mid_m < 1) mid_m = 1;
+
+        // get optimal m values for mid
+        double side_mean = mean_abs(side, nFrames);
+        double side_alpha = side_mean / (side_mean + 1.0);
+        if (side_alpha < 0.001) side_alpha = 0.001;
+        if (side_alpha > 0.999) side_alpha = 0.999;
+        uint32_t side_m = ceil(-1 / log(side_alpha));
+        if (side_m < 1) side_m = 1;
+
+        obs.write_n_bits(mid_m, 32);
+        obs.write_n_bits(side_m, 32);
+
+        GolombUtils golomb_mid(mid_m, ZIGZAG);
+        GolombUtils golomb_side(side_m, ZIGZAG);
+
+        // Determine initial samples to encode directly
+        size_t warmup = static_cast<size_t>(predictor_order);
+        if (warmup > nFrames) warmup = nFrames;
+
+        // Encode warmup samples directly
+        for (size_t i = 0; i < warmup; ++i) {
+            golomb_mid.golomb_encode(&obs, mid[i]);
+            golomb_side.golomb_encode(&obs, side[i]);
+        }
+
+        // Encode remaining samples as residuals
+        for (size_t i = warmup; i < nFrames; ++i) {
+            int predicted_mid = predict_from_order(mid, i, predictor_order);
+            int residual_mid = static_cast<int>(mid[i]) - predicted_mid;
+            golomb_mid.golomb_encode(&obs, residual_mid);
+
+            int predicted_side = predict_from_order(side, i, predictor_order);
+            int residual_side = static_cast<int>(side[i]) - predicted_side;
+            golomb_side.golomb_encode(&obs, residual_side);
+
+            // Debug: write residuals
+            //if (debug_file.is_open()) {
+            //    debug_file << block_num << "," << i << "," << residual_mid << "," << residual_side << "\n";
+            //}
+        }
+        //block_num++;
+    }
+
+    obs.close();
+    ofs.close();
+    
+    //if (debug_file.is_open()) {
+    //    debug_file.close();
+    //    cout << "Residuals written to residuals_debug.txt\n";
+    //}
+
+    auto end_time = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
+    cout << "Encoding finished in " << duration.count() << " ms\n";
+
+    return 0;
+}

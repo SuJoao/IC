@@ -68,3 +68,10 @@ target_include_directories(GolombLib PUBLIC ${CMAKE_SOURCE_DIR})
 # Golomb main executable
 add_executable(golomb golomb_main.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)
 
+# WAV lossless encoder/decoder
+add_executable(wav_lossless_enc wav_lossless_enc.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)
+target_link_libraries(wav_lossless_enc sndfile)
+
+add_executable(wav_lossless_dec wav_lossless_dec.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)
+target_link_libraries(wav_lossless_dec sndfile)
+
