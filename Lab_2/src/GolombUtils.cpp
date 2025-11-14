@@ -1,4 +1,44 @@
 #include "GolombUtils.h"
+#include <cstring>
+
+NegativeHandling parse_method(const char* method_str) {
+    if (strcmp(method_str, "zigzag") == 0) {
+        return ZIGZAG;
+    } else if (strcmp(method_str, "sign_magnitude") == 0) {
+        return SIGN_MAGNITUDE;
+    } else {
+        std::cerr << "Error: Invalid method. Use 'zigzag' or 'sign_magnitude'\n";
+        exit(1);
+    }
+}
+
+// Unsigned Golomb Encoding and Decoding
+void fetch_4B_value(BitStream *bs, int num) {
+    
+    int counter = 0;
+
+    while (counter < 32)
+    {
+        bs->write_bit(num%2);
+        num = num >> 1;
+        counter++;
+    }
+    
+}
+
+// Unsigned Golomb Encoding and Decoding
+void retrieve_4B_value(BitStream *bs) {
+    
+    int counter = 32;
+    int num = 0;
+    while (counter > 0)
+    {
+        num = num | (bs->read_bit() << counter);
+        
+        counter--;
+    }
+    
+}
 
 // Golomb Encoding and Decoding
 void GolombUtils::golomb_encode(BitStream *bs, int num) {

@@ -8,6 +8,8 @@ enum NegativeHandling {
     SIGN_MAGNITUDE = 1
 };
 
+NegativeHandling parse_method(const char*);
+
 class GolombUtils {
     public:
         GolombUtils(int m_value, NegativeHandling neg_handling_value)
