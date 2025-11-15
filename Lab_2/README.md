@@ -21,3 +21,19 @@ To test:
 
     // exercise 3
     ../bin/golomb <m> <method> <number> <output_file>
+
+	// exercise 4
+	../bin/wav_lossless_enc <input wav sample> <output conpressed file> [flags]
+
+	flags:
+	-b <block_size>   Block size for encoding (default: 1024)
+	-p <order>        Predictor order 0-3 (default: 1)
+	-m <method>       Negative handling method:
+						'zigzag', 'sign_magnitude'
+						(default: zigzag)
+	-gd               Use dynamic Golomb m (default)
+	-gs <m_value>     Use static Golomb m value
+
+	../bin/wav_lossless_dec <input compressed file> <output wav sample>
+
+
