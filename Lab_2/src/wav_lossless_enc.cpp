@@ -174,8 +174,8 @@ int main(int argc, char *argv[]) {
     }
 
     int channels = sndFile.channels();
-    if (channels != 2) {
-        cerr << "Error: input file must be stereo (2 channels) for mid/side.\n";
+    if (channels != 1 && channels != 2) {
+        cerr << "Error: input file must be mono (1 channel) or stereo (2 channels) for mid/side.\n";
         return 1;
     }
 
@@ -187,6 +187,17 @@ int main(int argc, char *argv[]) {
 
     BitStream obs{ofs, STREAM_WRITE};
 
+    cout << "Encoding parameters:\n";
+    cout << "  Block size: " << BLOCK_SIZE << "\n";
+    cout << "  Predictor order: " << predictor_order << "\n";
+    cout << "  Negative handling method: " << (method == ZIGZAG ? "zigzag" : "sign_magnitude") << "\n";
+    cout << "  Golomb m: " << (use_dynamic_m ? "dynamic" : to_string(static_m_value)) << "\n";
+    cout << "\n";
+    cout << "Encoding " << input_file << " to " << output_file << "\n";
+    cout << "  Sample rate: " << sndFile.samplerate() << "\n";
+    cout << "  Channels: " << channels << "\n";
+    cout << "  Total frames: " << sndFile.frames() << "\n\n";
+
     // Debug: open residuals file
     //fstream debug_file{"residuals_debug.txt", ios::out};
     //if (debug_file.is_open()) {
@@ -194,6 +205,7 @@ int main(int argc, char *argv[]) {
     //}
 
     // header: samplerate (32 bits), frames (32 bits), block_size (16 bits), channels (8 bits), predictor_order (8 bits), method (8 bits), use_dynamic_m (1 bit)
+
     obs.write_n_bits(static_cast<uint32_t>(sndFile.samplerate()), 32);
     obs.write_n_bits(static_cast<uint32_t>(sndFile.frames()), 32);
     obs.write_n_bits(static_cast<uint32_t>(BLOCK_SIZE), 16);
@@ -213,17 +225,26 @@ int main(int argc, char *argv[]) {
     //size_t block_num = 0;
     size_t nFrames;
     while ((nFrames = sndFile.readf(block_samples.data(), static_cast<int>(BLOCK_SIZE)))) {
-        // convert to mid/side for the frames read
-        for (size_t i = 0; i < nFrames; ++i) {
-            // L = block_samples[i*2 + 0], R = block_samples[i*2 + 1]
-            int L = block_samples[i * channels + 0];
-            int R = block_samples[i * channels + 1];
 
-            // mid = (L + R) / 2 (integer division, truncates toward zero)
-            mid[i] = floor_div2(L + R);
+        if (channels == 1) {
+            // Mono use only mid
+            for (size_t i = 0; i < nFrames; ++i) {
+                mid[i] = block_samples[i];
+                side[i] = 0; // not used for mono
+            }
+        } else {
+            // Stereo convert to mid/side
+            for (size_t i = 0; i < nFrames; ++i) {
+                // L = block_samples[i*2 + 0], R = block_samples[i*2 + 1]
+                int L = block_samples[i * channels + 0];
+                int R = block_samples[i * channels + 1];
 
-            // side = L - R
-            side[i] = L - R;
+                // mid = (L + R) / 2 (integer division, truncates toward zero)
+                mid[i] = floor_div2(L + R);
+
+                // side = L - R
+                side[i] = L - R;
+            }
         }
 
         uint32_t mid_m, side_m;
@@ -247,7 +268,9 @@ int main(int argc, char *argv[]) {
             if (side_m < 1) side_m = 1;
 
             obs.write_n_bits(mid_m, 32);
-            obs.write_n_bits(side_m, 32);
+            if(channels == 2){
+                obs.write_n_bits(side_m, 32);
+            }
         }
 
         GolombUtils golomb_mid(mid_m, method);
@@ -260,7 +283,9 @@ int main(int argc, char *argv[]) {
         // Encode warmup samples directly
         for (size_t i = 0; i < warmup; ++i) {
             golomb_mid.golomb_encode(&obs, mid[i]);
-            golomb_side.golomb_encode(&obs, side[i]);
+            if (channels == 2) {
+                golomb_side.golomb_encode(&obs, side[i]);
+            }
         }
 
         // Encode remaining samples as residuals
@@ -269,9 +294,11 @@ int main(int argc, char *argv[]) {
             int residual_mid = static_cast<int>(mid[i]) - predicted_mid;
             golomb_mid.golomb_encode(&obs, residual_mid);
 
-            int predicted_side = predict_from_order(side, i, predictor_order);
-            int residual_side = static_cast<int>(side[i]) - predicted_side;
-            golomb_side.golomb_encode(&obs, residual_side);
+            if (channels == 2) {
+                int predicted_side = predict_from_order(side, i, predictor_order);
+                int residual_side = static_cast<int>(side[i]) - predicted_side;
+                golomb_side.golomb_encode(&obs, residual_side);
+            }
 
             // Debug: write residuals
             //if (debug_file.is_open()) {

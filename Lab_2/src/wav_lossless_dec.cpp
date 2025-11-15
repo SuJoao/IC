@@ -93,8 +93,10 @@ int main(int argc, char *argv[]) {
             if (use_dynamic_m) {
                 mid_m = ibs.read_n_bits(32);
                 if(mid_m == EOF) break;
-                side_m = ibs.read_n_bits(32);
-                if(side_m == EOF) break;
+                if(channels == 2){
+                    side_m = ibs.read_n_bits(32);
+                    if(side_m == EOF) break;
+                }
             }
 
             GolombUtils golomb_mid(mid_m, method);
@@ -113,7 +115,9 @@ int main(int argc, char *argv[]) {
             // Decode warmup samples
             for (size_t i = 0; i < warmup; i++) {
                 mid[i] = golomb_mid.golomb_decode(&ibs);
-                side[i] = golomb_side.golomb_decode(&ibs);
+                if (channels == 2) {
+                    side[i] = golomb_side.golomb_decode(&ibs);
+                }
             }
 
             // Decode remaining samples as residuals and reconstruct
@@ -122,23 +126,33 @@ int main(int argc, char *argv[]) {
                 int residual_mid = golomb_mid.golomb_decode(&ibs);
                 mid[i] = predicted_mid + residual_mid;
 
-                int predicted_side = predict_from_order(side, i, predictor_order);
-                int residual_side = golomb_side.golomb_decode(&ibs);
-                side[i] = predicted_side + residual_side;
+                if (channels == 2) {
+                    int predicted_side = predict_from_order(side, i, predictor_order);
+                    int residual_side = golomb_side.golomb_decode(&ibs);
+                    side[i] = predicted_side + residual_side;
+                }
             }
 
-            // Reconstruct L and R from mid/side
-            // Encoder: mid = (L+R)/2, side = L-R
-            for (size_t i = 0; i < frames_to_decode; i++) {
-                int m = mid[i];
-                int s = side[i];
+            // Reconstruct samples
+            if (channels == 1) {
+                // Mono: mid channel is the audio
+                for (size_t i = 0; i < frames_to_decode; i++) {
+                    block_samples[i] = static_cast<short>(mid[i]);
+                }
+            } else {
+                // Stereo: reconstruct L and R from mid/side
+                // Encoder: mid = (L+R)/2, side = L-R
+                for (size_t i = 0; i < frames_to_decode; i++) {
+                    int m = mid[i];
+                    int s = side[i];
 
-                // L = mid + (side+1)/2, R = mid - side/2
-                int L = m + ((s + 1) >> 1);
-                int R = m - (s >> 1);
+                    // L = mid + (side+1)/2, R = mid - side/2
+                    int L = m + ((s + 1) >> 1);
+                    int R = m - (s >> 1);
 
-                block_samples[i * 2 + 0] = static_cast<short>(L);
-                block_samples[i * 2 + 1] = static_cast<short>(R);
+                    block_samples[i * 2 + 0] = static_cast<short>(L);
+                    block_samples[i * 2 + 1] = static_cast<short>(R);
+                }
             }
 
             sndFileOut.writef(block_samples.data(), static_cast<sf_count_t>(frames_to_decode));
