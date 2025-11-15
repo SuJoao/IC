@@ -65,8 +65,8 @@ int main(int argc, char *argv[]) {
         static_m_value = ibs.read_n_bits(32);
     }
 
-    if (channels != 2) {
-        cerr << "Only stereo (2 channels) supported\n";
+    if (channels !=1 && channels != 2) {
+        cerr << "Only mono (1 channel) or stereo (2 channels) supported\n";
         return 1;
     }
 

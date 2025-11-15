@@ -247,38 +247,55 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        // Determine warmup size
+        size_t warmup = static_cast<size_t>(predictor_order);
+        if (warmup > nFrames) warmup = nFrames;
+
+        // Compute residuals for the block
+        vector<short> mid_residuals(nFrames - warmup);
+        vector<short> side_residuals(nFrames - warmup);
+
+        for (size_t i = warmup; i < nFrames; ++i) {
+            int predicted_mid = predict_from_order(mid, i, predictor_order);
+            mid_residuals[i - warmup] = static_cast<short>(static_cast<int>(mid[i]) - predicted_mid);
+
+            if (channels == 2) {
+                int predicted_side = predict_from_order(side, i, predictor_order);
+                side_residuals[i - warmup] = static_cast<short>(static_cast<int>(side[i]) - predicted_side);
+            }
+        }
+
         uint32_t mid_m, side_m;
         mid_m = static_m_value;
         side_m = static_m_value;
 
         if (use_dynamic_m) {
-            // Calculate optimal m values dynamically
-            double mid_mean = mean_abs(mid, nFrames);
+            // Calculate optimal m values from residuals
+            double mid_mean = mean_abs(mid_residuals, nFrames - warmup);
             double mid_alpha = mid_mean / (mid_mean + 1.0);
             if (mid_alpha < 0.001) mid_alpha = 0.001;
             if (mid_alpha > 0.999) mid_alpha = 0.999;
             mid_m = ceil(-1 / log(mid_alpha));
             if (mid_m < 1) mid_m = 1;
 
-            double side_mean = mean_abs(side, nFrames);
-            double side_alpha = side_mean / (side_mean + 1.0);
-            if (side_alpha < 0.001) side_alpha = 0.001;
-            if (side_alpha > 0.999) side_alpha = 0.999;
-            side_m = ceil(-1 / log(side_alpha));
-            if (side_m < 1) side_m = 1;
-
+            // write mid m
             obs.write_n_bits(mid_m, 32);
-            if(channels == 2){
+
+            if (channels == 2) {
+                double side_mean = mean_abs(side_residuals, nFrames - warmup);
+                double side_alpha = side_mean / (side_mean + 1.0);
+                if (side_alpha < 0.001) side_alpha = 0.001;
+                if (side_alpha > 0.999) side_alpha = 0.999;
+                side_m = ceil(-1 / log(side_alpha));
+                if (side_m < 1) side_m = 1;
+
+                // write side m
                 obs.write_n_bits(side_m, 32);
             }
         }
 
         GolombUtils golomb_mid(mid_m, method);
         GolombUtils golomb_side(side_m, method);
-
-        // Determine initial samples to encode directly
-        size_t warmup = static_cast<size_t>(predictor_order);
-        if (warmup > nFrames) warmup = nFrames;
 
         // Encode warmup samples directly
         for (size_t i = 0; i < warmup; ++i) {
@@ -288,16 +305,12 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Encode remaining samples as residuals
-        for (size_t i = warmup; i < nFrames; ++i) {
-            int predicted_mid = predict_from_order(mid, i, predictor_order);
-            int residual_mid = static_cast<int>(mid[i]) - predicted_mid;
-            golomb_mid.golomb_encode(&obs, residual_mid);
+        // Encode residuals
+        for (size_t i = 0; i < nFrames - warmup; ++i) {
+            golomb_mid.golomb_encode(&obs, mid_residuals[i]);
 
             if (channels == 2) {
-                int predicted_side = predict_from_order(side, i, predictor_order);
-                int residual_side = static_cast<int>(side[i]) - predicted_side;
-                golomb_side.golomb_encode(&obs, residual_side);
+                golomb_side.golomb_encode(&obs, side_residuals[i]);
             }
 
             // Debug: write residuals
