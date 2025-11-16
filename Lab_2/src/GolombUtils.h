@@ -9,6 +9,8 @@ enum NegativeHandling {
 };
 
 NegativeHandling parse_method(const char*);
+void fetch_4B_value(BitStream*, int);
+int retrieve_4B_value(BitStream*);
 
 class GolombUtils {
     public:

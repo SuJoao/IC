@@ -46,6 +46,10 @@ if(OpenCV_FOUND)
     # Image rotate
     add_executable(image_rotate image_rotate.cpp)
     target_link_libraries(image_rotate ${OpenCV_LIBRARIES})
+
+    # Image compressor
+    add_executable(image_compressor imageCompress.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)
+    target_link_libraries(image_compressor ${OpenCV_LIBRARIES})
 else()
     message(WARNING "OpenCV not found - image processing tools will not be built")
     message(WARNING "Install OpenCV with: sudo apt-get install libopencv-dev")
@@ -75,3 +79,5 @@ target_link_libraries(wav_lossless_enc sndfile)
 add_executable(wav_lossless_dec wav_lossless_dec.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)
 target_link_libraries(wav_lossless_dec sndfile)
 
+# Test 4B values
+add_executable(test_4b_values test_4b_values.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <cstring>
 #include "GolombUtils.h"
 #include <opencv2/opencv.hpp>
@@ -70,6 +71,12 @@ int main(int argc, char* argv[]) {
 
     if (operation == "compress" ) {
         cv::Mat image = cv::imread(input_filename);
+        fstream file(output_filename, ios::out | ios::binary | ios::trunc);
+        if (!file.is_open()) {
+            cerr << "Error: Cannot create output file\n";
+            return 1;
+        }
+        BitStream bs(file, STREAM_WRITE);
     
         if (image.empty()) {
             std::cerr << "Error: Could not open or find the image '" << input_filename << "'" << std::endl;
@@ -78,6 +85,9 @@ int main(int argc, char* argv[]) {
     
         // Create a new empty image with the same size and type as the original
         cv::Mat result_image = cv::Mat(image.cols, image.rows, image.type());
+
+        cout << "image type : "<<image.type() << endl;
+        cout << "size of type var is " <<sizeof(image.type()) << endl;
     
         std::cout << "Processing image: " << image.cols << "x" << image.rows
                 << " with " << image.channels() << " channels." << std::endl;
@@ -116,7 +126,46 @@ int main(int argc, char* argv[]) {
             int pixel_count = image.rows * image.cols * image.channels();
             int aprox_m = (int)((total_difference+ (pixel_count/2)) / pixel_count);
             std::cout << "Suggested m value for Golomb coding: " << aprox_m << std::endl;
+
+            GolombUtils golomb(aprox_m, ZIGZAG);
+
+            fetch_4B_value(&bs, aprox_m); 
+            fetch_4B_value(&bs, (int)image.cols);
+            fetch_4B_value(&bs, (int)image.rows);
+            fetch_4B_value(&bs, image.type());
+            fetch_4B_value(&bs, image.channels());
+
+            for (int y = 0; y < image.rows; ++y) {
+                for (int x = 0; x < image.cols; ++x) {
+                    
+                    cv::Vec3b original_pixel = image.at<cv::Vec3b>(y, x);
+                    
+                    cv::Vec3b modified_pixel;
+
+                    std::cout << "predicting" << ", ";
+                    
+                    modified_pixel = predictor(x, y, image);
+                    
+                    
+                    for (size_t i = 0; i < 3; i++)
+                    {   
+                        golomb.golomb_encode(&bs,(int)modified_pixel[i] - (int)original_pixel[i]);
+                    }
+                    
+                    std::cout << std::endl;
+                    
+                    result_image.at<cv::Vec3b>(y, x) = modified_pixel;
+                    
+                }
+            }
+
+            cout<< "m : " << aprox_m << "\n";
+            cout<< "width : " << image.rows << "\n";
+            cout<< "height : " << image.cols << "\n";
+            bs.close();
+            file.close();
             
+        
         } else {
             std::cerr << "Error: Unsupported number of channels: " << image.channels() << std::endl;
             std::cerr << "This code only supports 3-channel (color) images." << std::endl;
@@ -136,8 +185,61 @@ int main(int argc, char* argv[]) {
         
     }
     else if (operation == "decompress")
-    {
-        /* code */
+    {   
+        cout << "decompressing ...";
+        fstream file(input_filename, ios::in | ios::binary);
+        if (!file.is_open()) {
+            cerr << "Error: Cannot create output file\n";
+            return 1;
+        }
+        BitStream bs(file, STREAM_READ);
+        
+        int m = retrieve_4B_value(&bs);
+        int width = retrieve_4B_value(&bs);
+        int height = retrieve_4B_value(&bs);
+        int type = retrieve_4B_value(&bs);
+        int channels = retrieve_4B_value(&bs);
+        
+        cv::Mat image = cv::Mat(width, height, type);
+        
+        cout<< "m : " << m << "\n";
+        cout<< "width : " << width << "\n";
+        cout<< "height : " << height << "\n";
+        cout<< "type : " << type << "\n";
+        cout<< "channels : " << channels << "\n";
+
+        GolombUtils golomb(m, ZIGZAG);
+
+        for (int y = 0; y < image.rows; ++y) {
+                for (int x = 0; x < image.cols; ++x) {
+                    
+                    // cv::Vec3b original_pixel = image.at<cv::Vec3b>(y, x);
+                    
+                    cv::Vec3b modified_pixel;
+
+                    // std::cout << "predicting" << ", ";
+                    
+                    modified_pixel = predictor(x, y, image);
+                    
+                    
+                    for (size_t i = 0; i < channels; i++)
+                    {   
+                        int diff= golomb.golomb_decode(&bs);
+                        modified_pixel[i] = (uchar)((int)modified_pixel[i] - diff);
+                    }
+                    
+                    // std::cout << std::endl;
+                    
+                    image.at<cv::Vec3b>(y, x) = modified_pixel;
+                    
+                }
+            }
+        bs.close();
+        file.close();
+        bool success = cv::imwrite(output_filename, image);
+        cout << "Decompressed image saved to " << output_filename << endl;
+
+
     }else {
         cerr << "Error: Unknown operation '" << operation << "'. Use 'compress' or 'decompress'.\n";
         return 1;

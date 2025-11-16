@@ -19,25 +19,23 @@ void fetch_4B_value(BitStream *bs, int num) {
 
     while (counter < 32)
     {
-        bs->write_bit(num%2);
-        num = num >> 1;
+        bs->write_bit((num >> counter) & 1);
         counter++;
     }
     
 }
 
 // Unsigned Golomb Encoding and Decoding
-void retrieve_4B_value(BitStream *bs) {
+int retrieve_4B_value(BitStream *bs) {
     
-    int counter = 32;
+    int counter = 0;
     int num = 0;
-    while (counter > 0)
+    while (counter < 32)
     {
-        num = num | (bs->read_bit() << counter);
-        
-        counter--;
+        num |= (bs->read_bit() << counter);
+        counter++;
     }
-    
+    return num;
 }
 
 // Golomb Encoding and Decoding
