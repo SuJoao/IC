@@ -316,16 +316,25 @@ std::ifstream::pos_type compress_image(const string& input_filename, const strin
                 }
             }
 
-            cout<< "m : " << aprox_m << "\n";
-            cout<< "width : " << image.rows << "\n";
-            cout<< "height : " << image.cols << "\n";
+            
             
             bs.close();
             
             file.close();
             std::filesystem::path file_path = "./" + output_filename;
+            std::filesystem::path file_path2 = "./" + input_filename;
             file_size = std::filesystem::file_size(file_path);
-            cout << "File size: " << file_size << " bytes" << std::endl;
+            double file_size2 = (double)std::filesystem::file_size(file_path2);
+            
+            cout << "----------------------------\n";
+            cout<< "m : " << aprox_m << "\n";
+            cout << "method used : " << predictor_idx << "\n";
+            cout << "Compression Ratio: " << ((double)file_size)/file_size2 << " bytes" << std::endl;
+            cout<< "width : " << image.rows << "\n";
+            cout<< "height : " << image.cols << "\n";
+            cout<< "pixel number : " << image.rows * image.cols<< "\n";
+            cout << "----------------------------\n";
+            
         } else {
             std::cerr << "Error: Unsupported number of channels: " << image.channels() << std::endl;
             std::cerr << "This code only supports 3-channel (color) images." << std::endl;
@@ -409,11 +418,15 @@ void decompress_image(const string& input_filename, const string& output_filenam
 int main(int argc, char* argv[]) {
     cv::Vec3b (*predictor)(int, int, cv::Mat, int) = predictors[0];
     if (argc < 4) {
-        cerr << "";
+        cout << "Usage:\n";
+        cout << "../bin/image_compressor <image_to_compress> compress <output_file>";
+		cout << "\nOR\n";
+		cout << "../bin/image_compressor <compressed_file> decompress <output_image>";
         return 1;
     }
 
     string input_filename = argv[1];
+
     string operation = argv[2];
 
     string output_filename = "output.comp"; // Default output filename

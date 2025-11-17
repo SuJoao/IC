@@ -36,4 +36,12 @@ To test:
 
 	../bin/wav_lossless_dec <input compressed file> <output wav sample>
 
+	// exercise 5
+	On the images directory use :
+		
+		../bin/image_compressor <image_to_compress> compress <output_file>
+		
+		
+		../bin/image_compressor <compressed_file> decompress <output_image> 
+
 
