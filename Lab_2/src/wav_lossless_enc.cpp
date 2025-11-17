@@ -18,11 +18,11 @@ enum PredictionMode {
 
 using namespace std;
 
-double mean_abs(const std::vector<short> &values, size_t nFrames) {
+double mean_abs(const std::vector<int> &values, size_t nFrames) {
     if (values.empty())
         return 0.0;
     double sum_abs = std::accumulate(values.begin(), values.end(), 0.0,
-                                     [](double acc, short v)
+                                     [](double acc, int v)
                                      {
                                          return acc + std::abs(static_cast<double>(v));
                                      });
@@ -35,12 +35,12 @@ inline int floor_div2(int x) {
     return -((-x + 1) / 2);
 }
 
-inline int predict_from_order(const std::vector<short> &samples, size_t idx, int order) {
+inline int predict_from_order(const std::vector<int> &samples, size_t idx, int order) {
     switch (order) {
     case 0:
         return 0;
     case 1:
-        return static_cast<int>(samples[idx - 1]);
+        return samples[idx - 1];
     case 2:
     {
         int a = samples[idx - 1];
@@ -57,7 +57,7 @@ inline int predict_from_order(const std::vector<short> &samples, size_t idx, int
         return 3 * a - 3 * b + c;
     }
     default:
-        return static_cast<int>(samples[idx - 1]);
+        return samples[idx - 1];
     }
 }
 
@@ -209,8 +209,8 @@ int main(int argc, char *argv[]) {
     }
 
     vector<short> block_samples(BLOCK_SIZE * channels);
-    vector<short> mid(BLOCK_SIZE);
-    vector<short> side(BLOCK_SIZE);
+    vector<int> mid(BLOCK_SIZE);
+    vector<int> side(BLOCK_SIZE);
 
     //size_t block_num = 0;
     size_t nFrames;
@@ -219,15 +219,14 @@ int main(int argc, char *argv[]) {
         if (channels == 1) {
             // Mono use only mid
             for (size_t i = 0; i < nFrames; ++i) {
-                mid[i] = block_samples[i];
+                mid[i] = static_cast<int>(block_samples[i]);
                 side[i] = 0; // not used for mono
             }
         } else {
             // Stereo convert to mid/side
             for (size_t i = 0; i < nFrames; ++i) {
-                // L = block_samples[i*2 + 0], R = block_samples[i*2 + 1]
-                int L = block_samples[i * channels + 0];
-                int R = block_samples[i * channels + 1];
+                int L = static_cast<int>(block_samples[i * channels + 0]);
+                int R = static_cast<int>(block_samples[i * channels + 1]);
 
                 // mid = (L + R) / 2 (integer division, truncates toward zero)
                 mid[i] = floor_div2(L + R);
@@ -242,16 +241,16 @@ int main(int argc, char *argv[]) {
         if (warmup > nFrames) warmup = nFrames;
 
         // Compute residuals for the block
-        vector<short> mid_residuals(nFrames - warmup);
-        vector<short> side_residuals(nFrames - warmup);
+        vector<int> mid_residuals(nFrames - warmup);
+        vector<int> side_residuals(nFrames - warmup);
 
         for (size_t i = warmup; i < nFrames; ++i) {
             int predicted_mid = predict_from_order(mid, i, predictor_order);
-            mid_residuals[i - warmup] = static_cast<short>(static_cast<int>(mid[i]) - predicted_mid);
+            mid_residuals[i - warmup] = mid[i] - predicted_mid;
 
             if (channels == 2) {
                 int predicted_side = predict_from_order(side, i, predictor_order);
-                side_residuals[i - warmup] = static_cast<short>(static_cast<int>(side[i]) - predicted_side);
+                side_residuals[i - warmup] = side[i] - predicted_side;
             }
         }
 
