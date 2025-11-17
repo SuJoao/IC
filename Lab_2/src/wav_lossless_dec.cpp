@@ -9,14 +9,14 @@
 
 using namespace std;
 
-inline int predict_from_order(const std::vector<short> &samples, size_t idx, int order)
+inline int predict_from_order(const std::vector<int> &samples, size_t idx, int order)
 {
     switch (order)
     {
     case 0:
         return 0;
     case 1:
-        return static_cast<int>(samples[idx - 1]);
+        return samples[idx - 1];
     case 2:
     {
         int a = samples[idx - 1];
@@ -31,7 +31,7 @@ inline int predict_from_order(const std::vector<short> &samples, size_t idx, int
         return 3 * a - 3 * b + c;
     }
     default:
-        return static_cast<int>(samples[idx - 1]);
+        return samples[idx - 1];
     }
 }
 
@@ -78,8 +78,8 @@ int main(int argc, char *argv[]) {
     }
 
     vector<short> block_samples(BLOCK_SIZE * channels);
-    vector<short> mid(BLOCK_SIZE);
-    vector<short> side(BLOCK_SIZE);
+    vector<int> mid(BLOCK_SIZE);
+    vector<int> side(BLOCK_SIZE);
 
     size_t frames_written = 0;
     int mid_m, side_m;
@@ -110,7 +110,6 @@ int main(int argc, char *argv[]) {
             // Determine warmup
             size_t warmup = static_cast<size_t>(predictor_order);
             if (warmup > frames_to_decode) warmup = frames_to_decode;
-            if (warmup < 1) warmup = 1;
 
             // Decode warmup samples
             for (size_t i = 0; i < warmup; i++) {
