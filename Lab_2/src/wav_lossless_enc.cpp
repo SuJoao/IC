@@ -83,16 +83,6 @@ void print_usage(const char* prog_name) {
     cout << "  " << prog_name << " input.wav output.bin -gs 8\n";
 }
 
-NegativeHandling parse_method(const char* method_str) {
-    if (strcmp(method_str, "zigzag") == 0) {
-        return ZIGZAG;
-    } else if (strcmp(method_str, "sign_magnitude") == 0) {
-        return SIGN_MAGNITUDE;
-    } else {
-        cerr << "Error: Invalid method. Use 'zigzag', 'sign_magnitude''\n";
-        exit(1);
-    }
-}
 
 int main(int argc, char *argv[]) {
     auto start_time = chrono::high_resolution_clock::now();

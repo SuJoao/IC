@@ -78,6 +78,3 @@ target_link_libraries(wav_lossless_enc sndfile)
 
 add_executable(wav_lossless_dec wav_lossless_dec.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)
 target_link_libraries(wav_lossless_dec sndfile)
-
-# Test 4B values
-add_executable(test_4b_values test_4b_values.cpp $<TARGET_OBJECTS:GolombLib> $<TARGET_OBJECTS:Common>)
